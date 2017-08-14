@@ -15,7 +15,6 @@ class Thread():
     page = None
     number = None
     modified = None
-    contents = None
 
     def __init__(self, page, number, modified):
         self.page = str(page)
@@ -39,7 +38,8 @@ def dumpToFile(contents):
 def getData(url):
     try:
         data = json.loads(urllib2.urlopen(url).read())
-    except: # URL not found
+    except:
+        print "URL is 404"
         data = None
 
     time.sleep(1) # One request per second
@@ -47,10 +47,14 @@ def getData(url):
     return data
 
 def main():
-    data = getData(threads_url)
+    top = getData(threads_url)
+    if not top:
+        print "Couldn't reach " + threads_url
+        return 1
+
     threads = [ ]
 
-    for page in data:
+    for page in top:
         for thread in page["threads"]:
             threads.append(Thread(page["page"], thread["no"], thread["last_modified"]))
 
