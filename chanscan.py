@@ -1,10 +1,14 @@
+#!/usr/bin/python
+
 import datetime
 import smtplib
+import sqlite3
 import urllib2
 import signal
 import json
 import time
 import sys
+import os
 import re
 
 #------------------------------------------------------------------------------#
@@ -20,21 +24,22 @@ sys.setdefaultencoding('utf8')
 
 debug       = False
 
+retries     = 3
+
 honorHiro   = True
 sleepTime   = 1
 
-stringWidth = 80
-
-board       = "/x/"
 regex       = r"(\bVox\b)|(\bBeau\b)"
 
-website_url = "https://a.4cdn.org/" + board
-catalog_url = website_url + "catalog.json"
-threads_url = website_url + "threads.json"
-archive_url = website_url + "archive.json"
-content_url = lambda threadno : website_url + "thread/" + threadno + ".json"
+apiroot_url = "https://a.4cdn.org/x/"
+catalog_url = apiroot_url + "catalog.json"
+threads_url = apiroot_url + "threads.json"
+archive_url = apiroot_url + "archive.json"
+content_url = lambda threadno : apiroot_url + "thread/" + threadno + ".json"
 
 get_now     = lambda : datetime.datetime.now().strftime("%Y/%m/%d-%H:%M:%S")
+
+dbName      = "matches.db"
 
 #------------------------------------------------------------------------------#
 # Classes                                                                      #
@@ -71,25 +76,31 @@ def dumpToFile(contents):
     fout.close()
 
 def getData(url):
-    try:
-        data = json.loads(urllib2.urlopen(url).read())
-    except Exception as e:
-        data = None
-        sys.stderr.write("\nHTTPError in '%s': %s\n" % url, str(e))
-
     if honorHiro == True:
         time.sleep(sleepTime)
 
-    return data
+    for attempt in xrange(0, retries):
+        try:
+            return json.loads(urllib2.urlopen(url).read())
+        except Exception as e:
+            writeToStderr("[%s] [Attempt %d] HTTPError in '%s': %s" % (get_now(), attempt, url, str(e)))
 
-def writeToConsole(string):
-    sys.stdout.write(("{0:%d}" % stringWidth).format("\r%s" % string))
-    sys.stdout.write("\033[%dD" % (stringWidth - len(string) - 1))
+    sys.stderr.write("\nCouldn't retrieve JSON from API call '%s'\n" % threads_url)
+    sys.exit(1)
+
+def writeToStdout(string):
+    sys.stdout.write("\r%s\r%s" % (''.ljust(int(os.popen('stty size', 'r').read().split()[1])), string))
     sys.stdout.flush()
 
+def writeToStderr(error):
+    sys.stderr.write("\n" % error)
+    open("stderr.txt", "a").write("\n%s\n" % error)
+
 def matchFound(threadno, comment):
-    writeToConsole("Found a match in thread %s" % threadno)
-    open("matches.txt", "a").write("%s - %s: %s\n" % (get_now(), threadno, comment))
+    now = get_now()
+
+    writeToStdout("Found a match in thread %s\n" % threadno)
+    open("matches.txt", "a").write("%s - %s: %s\n" % (now, threadno, comment))
 
     body = "Dear Google, this isn't a spam bot, it's just an account I made for sending myself notifications from a pet project, which I threw together while drunk so it's kinda shitty."
     server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -97,36 +108,48 @@ def matchFound(threadno, comment):
     server.login("chanscannotify@gmail.com", "6_2J@#hi~#soW2WT")
     server.sendmail("chanscannotify@gmail.com", "jaredjpruett@gmail.com", "%s\n\n\n%s" % (threadno, body))
     server.quit()
- 
+
+    con = sqlite3.connect(dbName)
+    db = con.cursor()
+    db.execute("CREATE TABLE IF NOT EXISTS matches (thread TEXT PRIMARY KEY, datetime TEXT NOT NULL)")
+    db.execute("INSERT OR REPLACE INTO matches ('thread', 'datetime') VALUES ('%s', '%s')" % (threadno, now))
+    con.commit()
+    con.close()
+
+def dbEntryExists(entry):
+    con = sqlite3.connect(dbName)
+    db = con.cursor()
+    db.execute("CREATE TABLE IF NOT EXISTS matches (thread TEXT PRIMARY KEY, datetime TEXT NOT NULL)")
+    db.execute("SELECT thread FROM matches WHERE thread = '%s'" % entry)
+    found = len(db.fetchall())
+    con.close()
+    return found
+
 #------------------------------------------------------------------------------#
 # Main                                                                         #
 #------------------------------------------------------------------------------#
 
 signal.signal(signal.SIGINT, sigint)
 
-reported = [ ]
 while True:
     pages = getData(threads_url) # Get all pages of a board
-    if not pages:
-        sys.stderr.write("\nCouldn't retrieve JSON from API call '%s'\n" % threads_url)
-        sys.exit(1)
-
     threads = [ ]
     for page in pages:
         for thread in page["threads"]: # Get all of a board's active threads.
             threads.append(Thread(page["page"], thread["no"], thread["last_modified"]))
     for thread in threads: # Traverse each thread.
         last = False
-        writeToConsole("Parsing threads: %s [page %s]..." % (thread.number, thread.page))
+        writeToStdout("Parsing threads: %s [page %s]..." % (thread.number, thread.page))
         contents = getData(content_url(thread.number)) # Get all posts in a thread.
         if contents:
-            for post in contents["posts"]: # Search each post in a thread for a regex match. ToDO: Also search subject, images, names, etc.
+            # ToDO: Also search subject, images, names, etc.
+            for post in contents["posts"]: # Search each post in a thread for a regex match.
                 if "com" in post: # Not all posts have a comment.
-                    if re.search(regex, str(post["com"]), flags=re.IGNORECASE) and str(thread.number) not in reported: # If a match was found, report it and store it so it's not reported repeatedly.
+                    if re.search(regex, str(post["com"]), flags=re.IGNORECASE) and not dbEntryExists(str(post["com"])): # If a match was found, store it so we're not notified of the same match repeatedly.
                         matchFound(thread.number, str(post["com"]))
-                        reported.append(thread.number)
                         last = True
                         break
 
     if last == True: sys.stdout.write("\n")
-    writeToConsole("Thread scanning completed. Sleeping for ten minutes.")
+    writeToStdout("Thread scanning completed. Sleeping for ten minutes.")
+    time.sleep(3600)
