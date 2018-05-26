@@ -7,7 +7,7 @@ import sqlite3
 dbName = "matches.db"
 
 if not os.path.isfile(dbName):
-    sys.stderr.write("Database does not exist; exiting.\n")
+    sys.stderr.write("Database does not exist. Exiting.\n")
     sys.exit(1)
 
 con = sqlite3.connect(dbName)
