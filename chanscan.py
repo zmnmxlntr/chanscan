@@ -93,8 +93,8 @@ def writeToStdout(string):
     sys.stdout.flush()
 
 def writeToStderr(error):
-    sys.stderr.write("\n" % error)
-    open("stderr.txt", "a").write("\n%s\n" % error)
+    sys.stderr.write("\r%s\n" % error)
+    open("stderr.txt", "a").write("%s\n" % error)
 
 def matchFound(threadno, comment):
     now = get_now()
