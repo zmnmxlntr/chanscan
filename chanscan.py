@@ -109,7 +109,10 @@ def getData(url):
     return None
 
 def writeToStdout(string):
-    sys.stdout.write("\r%s\r%s" % (''.ljust(int(os.popen('stty size', 'r').read().split()[1])), string))
+    columns = int(os.popen('stty size', 'r').read().split()[1])
+    line = "\r%s\r[%s] %s" % (''.ljust(columns), get_now(), string)
+    if len(line.strip()) > columns: line = line[:columns - 5] + "[...]"
+    sys.stdout.write(line)
     sys.stdout.flush()
 
 def writeToStderr(error):
