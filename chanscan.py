@@ -229,4 +229,3 @@ while True:
     for x in xrange(0, scanEvery):
         writeToStdout("Thread scanning completed. Scanning again in %d minutes..." % (scanEvery - x))
         time.sleep(60)
-
