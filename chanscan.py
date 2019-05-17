@@ -23,8 +23,9 @@ sys.setdefaultencoding('utf8')
 #==============================================================================#
 
 version           = "1.0"
-
 debug             = False
+
+opOnly            = True
 
 honorHiro         = True
 sleepTime         = 1
@@ -32,11 +33,12 @@ scanEvery         = 15
 
 maxRetries        = 3
 
-regex_terms       = [ "Vox", "Beau" ]
-regex_terms       = [ "shit", "shitty" ]
+regex_terms       = [ "Hunger Games", "HG" ]
+#regex_terms       = [ "Vox", "Beau" ]
+#regex_terms       = [ "shit", "shitty" ]
 match_regex       = '|'.join([ r"(\b%s\b)" % term for term in regex_terms ])
 
-boardName         = "x"
+boardName         = "b"
 apiroot_url       = "https://a.4cdn.org/%s/" % boardName
 catalog_url       = apiroot_url + "catalog.json"
 threads_url       = apiroot_url + "threads.json"
@@ -217,6 +219,8 @@ while True:
                         matchFound(thread.number, str(post["com"]))
                         last = True
                         break
+            if opOnly == True:
+                continue
         else:
             if debug: print(" No contents!")
 
