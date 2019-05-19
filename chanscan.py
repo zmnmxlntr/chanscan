@@ -220,8 +220,8 @@ while True:
                         matchFound(thread.number, str(post["com"]))
                         last = True
                         break
-            if opOnly == True:
-                continue
+                if opOnly == True:
+                    continue
         else:
             if debug: print(" No contents!")
 
