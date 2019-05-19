@@ -110,9 +110,8 @@ def getData(url):
 
 def writeToStdout(string):
     columns = int(os.popen('stty size', 'r').read().split()[1])
-    line = "\r%s\r[%s] %s" % (''.ljust(columns), get_now(), string)
-    if len(line.strip()) > columns: line = line[:columns - 5] + "[...]"
-    sys.stdout.write(line)
+    if len(line.strip()) > columns - 22: line = line[:columns - 28] + " [...]"
+    sys.stdout.write("\r[%s] %s" % (get_now(), line.ljust(columns).strip()))
     sys.stdout.flush()
 
 def writeToStderr(error):
@@ -121,7 +120,6 @@ def writeToStderr(error):
     open("stderr.out", "a").write("[%s] %s\n" % (now, error))
 
 def matchFound(threadno, comment):
-    #writeToStdout("boards.4chan.org/%s/thread/%s - %s\n" % (threadno, boardName, threadno, comment))
     writeToStdout("boards.4chan.org/%s/thread/%s - %s\n" % (boardName, threadno, comment))
     #open("matches.txt", "a").write("%s - %s: %s\n" % (get_now(), threadno, comment))
 
@@ -232,4 +230,3 @@ while True:
     for x in xrange(0, scanEvery):
         writeToStdout("Thread scanning completed. Scanning again in %d minutes..." % (scanEvery - x))
         time.sleep(60)
-
