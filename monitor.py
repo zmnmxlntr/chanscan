@@ -11,6 +11,38 @@ import sys
 import os
 import re
 
+#==============================================================================#
+# -- Globals ----------------------------------------------------------------- #
+#==============================================================================#
+
+honorHiro       = True
+sleepTime       = 1
+scanEvery       = 5
+
+maxRetries      = 3
+
+regex_terms     = [ "Virginia", "zmnmxlntr", "tool", "script" ]
+match_regex     = '|'.join([ r"(\b%s\b)" % term for term in regex_terms ])
+
+boardName       = "b"
+apiroot_url     = "https://a.4cdn.org/%s/" % boardName
+content_url     = lambda threadno : apiroot_url + "thread/" + threadno + ".json"
+
+smtp_url        = "smtp.gmail.com"
+smtp_port       = 587
+email_address   = "chanscannotify@gmail.com"
+email_password  = "6_2J@#hi~#soW2WT"
+
+databaseName    = "matches.db"
+
+get_now         = lambda : datetime.datetime.now().strftime("%Y/%m/%d-%H:%M:%S")
+
+get_message     = lambda e : getattr(e, 'message', str(e))
+
+#==============================================================================#
+# -- Functions --------------------------------------------------------------- #
+#==============================================================================#
+
 def getData(url):
     if honorHiro == True:
         time.sleep(sleepTime)
@@ -20,7 +52,7 @@ def getData(url):
         except urllib2.HTTPError as e:
             if e.code == 404:
                 return
-            writeToStderr("(Attempt %d) HTTPError in '%s': %s" % (attempt, url, str(e)))
+            writeToStderr("(Attempt %d) HTTPError in '%s': %s" % (attempt, url, e.message))
             time.sleep(sleepTime)
     writeToStderr("Couldn't retrieve JSON")
     return None
@@ -36,21 +68,12 @@ def sendMail(threadno):
     server.sendmail(email_address, email_address, "%s\n\n\nKeyword detected in HG thread" % (threadno))
     server.quit()
 
-def dbAddEntry(threadno, now, comment):
-    con = sqlite3.connect(databaseName)
-    dbc = con.cursor()
-    dbc.execute(create_statement)
-    dbc.execute(insert_statement(threadno, now, comment))
-    con.commit()
-    con.close()
-
-def writeToStderr(error):
-    now = get_now()
-    open("stderr.out", "a").write("[%s] %s\n" % (now, error))
-
 def writeToStdout(string):
     sys.stdout.write("\r%s\r%s" % (''.ljust(int(os.popen('stty size', 'r').read().split()[1])), string))
     sys.stdout.flush()
+
+def writeToStderr(error):
+    open("stderr.out", "a").write("[%s] %s\n" % (get_now(), error))
 
 def sigint(signal, frame):
     sys.stdout.write("\nCaught SIGINT. Exiting.\n")
@@ -66,32 +89,6 @@ sys.setdefaultencoding('utf8')
 signal.signal(signal.SIGINT, sigint)
 
 #==============================================================================#
-# -- Globals ----------------------------------------------------------------- #
-#==============================================================================#
-
-honorHiro       = False
-sleepTime       = 1
-scanEvery       = 5
-
-maxRetries      = 3
-
-regex_terms     = [ "Virginia", "zmnmxlntr", "tool", "script" ]
-match_regex     = '|'.join([ r"(%s)" % term for term in regex_terms ])
-
-boardName         = "b"
-apiroot_url       = "https://a.4cdn.org/%s/" % boardName
-content_url       = lambda threadno : apiroot_url + "thread/" + threadno + ".json"
-
-smtp_url        = "smtp.gmail.com"
-smtp_port       = 587
-email_address   = "chanscannotify@gmail.com"
-email_password  = "6_2J@#hi~#soW2WT"
-
-databaseName    = "matches.db"
-
-get_now         = lambda : datetime.datetime.now().strftime("%Y/%m/%d-%H:%M:%S")
-
-#==============================================================================#
 # -- Main -------------------------------------------------------------------- #
 #==============================================================================#
 
@@ -99,8 +96,10 @@ while True:
     matches = [ ]
 
     if not os.path.isfile(databaseName):
-        sys.stderr.write("Database does not exist. Exiting.\n")
-        sys.exit(1)
+        for x in xrange(0, scanEvery):
+            writeToStdout("Thread scanning completed. Scanning again in %d minutes..." % (scanEvery - x))
+            time.sleep(60)
+        continue
     con = sqlite3.connect(databaseName)
     dbc = con.cursor()
     dbc.execute("SELECT thread FROM matches")

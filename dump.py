@@ -46,7 +46,7 @@ matches = [ ]
 for entry in dbc.fetchall():
     matches.append(Match(entry[0], entry[1], re.sub(r"(<br>)+", " ", HTMLParser.HTMLParser().unescape(entry[2]))))
 for match in matches:
-    string = strip_tags("%s - https://boards.4chan.org/x/thread/%s - %s" % (match.datetime, match.thread, match.comment))
+    string = strip_tags("%s - https://boards.4chan.org/b/thread/%s - %s" % (match.datetime, match.thread, match.comment))
     if not (len(sys.argv) > 1 and sys.argv[1] == "full") and len(string) > columns: string = string[:columns - 5] + "[...]"
     print(string)
 

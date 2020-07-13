@@ -15,6 +15,10 @@ import re
 # -- Uhhhhhh ----------------------------------------------------------------- #
 #==============================================================================#
 
+#signal.signal(signal.SIGINT, lambda signal, frame : (sys.stdout.write("\b\b  \r"), sys.exit(0)))
+signal.signal(signal.SIGINT, lambda signal, frame : (sys.stdout.write("\b\b  \r[%s] Caught SIGINT. Exiting.\n" % get_now()), sys.exit(0)))
+#signal.signal(signal.SIGINT, lambda s, f: (writeToStdout("Caught SIGINT. Exiting.\n"), sys.exit(0)))
+
 reload(sys) # tf this do
 sys.setdefaultencoding('utf8')
 
@@ -56,6 +60,8 @@ insert_statement  = lambda threadno, now, comment : "INSERT OR REPLACE INTO matc
 select_statement  = lambda entry : "SELECT thread FROM matches WHERE thread = '%s'" % entry
 
 get_now           = lambda : datetime.datetime.now().strftime("%Y/%m/%d-%H:%M:%S")
+
+get_message       = lambda e : getattr(e, 'message', str(e))
 
 #==============================================================================#
 # -- Classes ----------------------------------------------------------------- #
@@ -101,21 +107,21 @@ def getData(url):
         except urllib2.HTTPError as e:
             if e.code == 404:
                 return
-            writeToStderr("(Attempt %d) HTTPError in '%s': %s" % (attempt, url, str(e)))
+            writeToStderr("[Attempt %d] HTTPError in '%s': %s" % (attempt, url, get_message(e)))
             time.sleep(sleepTime)
 
     writeToStderr("Couldn't retrieve JSON from API call '%s'" % threads_url)
 
     return None
 
-def writeToStdout(string):
+def writeToStdout(line):
     columns = int(os.popen('stty size', 'r').read().split()[1])
-    if len(line.strip()) > columns - 22: line = line[:columns - 28] + " [...]"
-    sys.stdout.write("\r[%s] %s" % (get_now(), line.ljust(columns).strip()))
+    if len(line.strip()) > columns - 22: line = line[:columns - 29] + " [...]"
+    sys.stdout.write(("\r[%s] %s" % (get_now(), line.strip().ljust(columns - 22))))
+    if line[-1] == '\n': sys.stdout.write('\n\r')
     sys.stdout.flush()
 
-def writeToStderr(error):
-    now = get_now()
+def writeToStderr(error, now = get_now()):
     if debug == True: sys.stderr.write("\r[%s] %s\n" % (now, error))
     open("stderr.out", "a").write("[%s] %s\n" % (now, error))
 
@@ -123,17 +129,17 @@ def matchFound(threadno, comment):
     writeToStdout("boards.4chan.org/%s/thread/%s - %s\n" % (boardName, threadno, comment))
     #open("matches.txt", "a").write("%s - %s: %s\n" % (get_now(), threadno, comment))
 
-    sendMail(threadno)
     dbAddEntry(threadno, get_now(), comment)
+    sendMail(threadno)
 
 def sendMail(threadno):
-    server = smtplib.SMTP(smtp_url, smtp_port)
-    body   = "Dear Google, this isn't a spam bot, it's just an account I made for sending myself notifications from a pet project, which I threw together while drunk so it's kinda shitty."
+    srvr = smtplib.SMTP(smtp_url, smtp_port)
+    body = "Dear Google, this isn't a spam bot, it's just an account I made for sending myself notifications from a pet project, which I threw together while drunk so it's kinda shitty."
 
-    server.starttls()
-    server.login(email_address, email_password)
-    server.sendmail(email_address, email_address, "%s\n\n\n%s" % (threadno, body))
-    server.quit()
+    srvr.starttls()
+    srvr.login(email_address, email_password)
+    srvr.sendmail(email_address, email_address, "%s\n\n\n%s" % (threadno, body))
+    srvr.quit()
 
 def dbAddEntry(threadno, now, comment):
     con = sqlite3.connect(databaseName)
@@ -178,20 +184,17 @@ def sendSMS():
 # -- Main -------------------------------------------------------------------- #
 #==============================================================================#
 
-signal.signal(signal.SIGINT, sigint)
-
 while True:
     pages = None
-    last  = None
+    #last  = None
 
-    #if debug: print("\nGetting list of threads...")
     writeToStdout("Getting threads...")
     for x in xrange(0, 3):
         try:
             pages = getData(threads_url) # Get all pages of a board
             break
         except Exception as e:
-            writeToStderr("Exception encountered in getData('%s'): %s" % (threads_url, str(e)))
+            writeToStderr("Exception encountered in getData('%s'): %s" % (threads_url, get_message(e)))
     if pages == None:
         writeToStderr("Unable to retrieve threads.")
         time.sleep(60)
@@ -201,16 +204,15 @@ while True:
     threads = [ Thread(page["page"], thread["no"], thread["last_modified"]) for page in pages for thread in page["threads"] ]
     counter = 0
     for thread in threads: # Traverse each thread.
-        last = False
+        #last = False
         counter += 1
         writeToStdout("Checking thread %s [page %s] (%d/%d)" % (thread.number, thread.page, counter, len(threads)))
-        if debug: print("\nGetting thread...")
         for x in xrange(0, 3):
             try:
                 contents = getData(content_url(thread.number)) # Get all posts in a thread.
                 break
             except Exception as e:
-                writeToStderr("Exception encountered in getData('%s'): %s" % (content_url(thread.number), str(e)))
+                writeToStderr("Exception encountered in getData('%s'): %s" % (content_url(thread.number), get_message(e)))
         if contents:
             # ToDO: Also search subject, images, names, etc.
             for post in contents["posts"]: # Search each post in a thread for a regex match.
@@ -218,15 +220,13 @@ while True:
                     #if re.search(match_regex, str(post["com"]), flags=re.IGNORECASE) and not dbEntryExists(str(thread.number)) and not "voices of x" in str(post["com"]).lower(): # If a match was found, store it so we're not notified of the same match repeatedly.
                     if re.search(match_regex, str(post["com"]), flags=re.IGNORECASE) and not dbEntryExists(str(thread.number)) and not re.search("voices of /?x", str(post["com"]), flags=re.IGNORECASE): # If a match was found, store it so we're not notified of the same match repeatedly.
                         matchFound(thread.number, str(post["com"]))
-                        last = True
+                        #last = True
                         break
                 if opOnly == True:
                     continue
-        else:
-            if debug: print(" No contents!")
 
-    if last == True:
-        sys.stdout.write("\n")
+    #if last == True:
+    #    sys.stdout.write("\n")
     for x in xrange(0, scanEvery):
         writeToStdout("Thread scanning completed. Scanning again in %d minutes..." % (scanEvery - x))
         time.sleep(60)
